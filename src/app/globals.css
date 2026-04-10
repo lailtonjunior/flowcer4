@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tokens semânticos derivados da paleta navy / aqua / teal / sand */
+    --background: 42 50% 96%;        /* sand 50 */
+    --foreground: 217 70% 13%;       /* navy 500 */
+    --surface: 0 0% 100%;            /* branco */
+
+    --primary: 217 70% 13%;          /* navy */
+    --primary-foreground: 42 50% 96%;
+
+    --accent: 184 64% 34%;           /* teal */
+    --accent-foreground: 0 0% 100%;
+
+    --highlight: 184 60% 60%;        /* aqua */
+    --highlight-foreground: 217 70% 13%;
+
+    --muted: 42 35% 90%;
+    --muted-foreground: 217 25% 35%;
+
+    --border: 42 30% 82%;
+    --input: 42 30% 88%;
+    --ring: 184 64% 34%;
+
+    --success: 152 55% 38%;
+    --warning: 38 90% 50%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --radius: 0.625rem;
+
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+  }
+
+  .dark {
+    --background: 217 50% 8%;
+    --foreground: 42 35% 92%;
+    --surface: 217 45% 12%;
+
+    --primary: 184 60% 60%;          /* aqua brilha no dark */
+    --primary-foreground: 217 70% 10%;
+
+    --accent: 184 60% 50%;
+    --accent-foreground: 217 70% 10%;
+
+    --highlight: 184 70% 65%;
+    --highlight-foreground: 217 70% 10%;
+
+    --muted: 217 35% 18%;
+    --muted-foreground: 42 25% 75%;
+
+    --border: 217 30% 22%;
+    --input: 217 30% 20%;
+    --ring: 184 60% 55%;
+
+    --success: 152 55% 50%;
+    --warning: 38 90% 60%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+
+  body {
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+}
