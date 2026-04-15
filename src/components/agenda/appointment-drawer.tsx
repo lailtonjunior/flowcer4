@@ -107,16 +107,31 @@ export function AppointmentDrawer({
     }
   }, [proId, startTime, professionals, setValue, initial]);
 
-  const filteredPatients = patients
-    .filter((p) => {
-      const q = patientSearch.toLowerCase();
-      return (
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.spp.toLowerCase().includes(q)
-      );
-    })
-    .slice(0, 50);
+  const [livePatients, setLivePatients] = useState<Patient[]>(patients);
+
+  useEffect(() => {
+    const q = patientSearch.trim();
+    if (q.length < 3) {
+      setLivePatients(patients.slice(0, 50));
+      return;
+    }
+    
+    const timer = setTimeout(async () => {
+      // Import the server action dynamically to avoid circular dependencies if any, 
+      // but since we are in a client component we can just use the imported one.
+      startTransition(async () => {
+        try {
+          const { listPatients } = await import("@/services/patients/actions");
+          const res = await listPatients(q);
+          setLivePatients(res);
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [patientSearch, patients]);
 
   function onSubmit(data: AppointmentInput) {
     startTransition(async () => {
@@ -221,7 +236,7 @@ export function AppointmentDrawer({
                   <SelectValue placeholder="Selecione um paciente" />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredPatients.map((p) => (
+                  {livePatients.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.spp} — {p.name}
                     </SelectItem>

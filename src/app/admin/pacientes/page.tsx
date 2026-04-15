@@ -5,16 +5,21 @@ import { PatientsTable } from "./patients-table";
 
 export const dynamic = "force-dynamic";
 
-export default async function PacientesPage() {
-  const patients = await listPatients();
+interface Props {
+  searchParams: Promise<{ q?: string }>;
+}
+
+export default async function PacientesPage({ searchParams }: Props) {
+  const sp = await searchParams;
+  const patients = await listPatients(sp.q);
   return (
     <>
       <PageHeader
         title="Pacientes"
-        description="Cadastro de pacientes com SPP único."
+        description="Pesquisa direta na base do SIGH."
       />
       <Card className="overflow-hidden">
-        <PatientsTable data={patients} />
+        <PatientsTable data={patients} initialSearch={sp.q} />
       </Card>
     </>
   );

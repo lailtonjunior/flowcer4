@@ -1,7 +1,8 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,16 +13,27 @@ import { deletePatient } from "@/services/patients/actions";
 import type { Patient } from "@/types/database";
 import { formatDate } from "@/lib/utils/dates";
 
-export function PatientsTable({ data }: { data: Patient[] }) {
+export function PatientsTable({ data, initialSearch }: { data: Patient[], initialSearch?: string }) {
   const dialog = usePatientDialog();
-  const [filter, setFilter] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const [filter, setFilter] = useState(initialSearch ?? "");
   const [isPending, startTransition] = useTransition();
 
-  const filtered = data.filter(
-    (p) =>
-      p.name.toLowerCase().includes(filter.toLowerCase()) ||
-      p.spp.toLowerCase().includes(filter.toLowerCase())
-  );
+  // Debounce the input and then push to url so the server fetches from SIGH
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const q = filter.trim();
+      const params = new URLSearchParams(searchParams);
+      if (q) params.set("q", q);
+      else params.delete("q");
+      startTransition(() => {
+        router.push(`${pathname}?${params.toString()}`);
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [filter, pathname, router, searchParams]);
 
   function handleDelete(id: string) {
     if (!confirm("Excluir paciente? Esta ação não pode ser desfeita.")) return;
@@ -39,7 +51,7 @@ export function PatientsTable({ data }: { data: Patient[] }) {
     <>
       <div className="flex items-center justify-between gap-4 border-b border-border p-4">
         <Input
-          placeholder="Buscar por nome ou SPP..."
+          placeholder="Buscar no SIGH (mínimo 3 letras)..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="max-w-sm"
@@ -50,9 +62,9 @@ export function PatientsTable({ data }: { data: Patient[] }) {
         </Button>
       </div>
 
-      {filtered.length === 0 ? (
+      {data.length === 0 ? (
         <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-          Nenhum paciente cadastrado.
+          Nenhum paciente encontrado.
         </div>
       ) : (
         <table className="w-full text-sm">
@@ -67,7 +79,7 @@ export function PatientsTable({ data }: { data: Patient[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filtered.map((p) => (
+            {data.map((p) => (
               <tr key={p.id} className="hover:bg-muted/30">
                 <td className="px-4 py-3 font-mono text-xs text-accent">
                   {p.spp}

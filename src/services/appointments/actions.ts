@@ -20,7 +20,7 @@ export async function listAppointmentsByDate(date: string) {
     .select(
       `*,
        professional:professionals(id,name,specialty,display_color,room),
-       patient:patients(id,spp,name)`
+       patient:patients(id,spp,name,phone)`
     )
     .eq("appointment_date", date)
     .order("start_time");
@@ -36,7 +36,7 @@ export async function listAppointmentsRange(startDate: string, endDate: string) 
     .select(
       `*,
        professional:professionals(id,name,specialty,display_color,room),
-       patient:patients(id,spp,name)`
+       patient:patients(id,spp,name,phone)`
     )
     .gte("appointment_date", startDate)
     .lte("appointment_date", endDate)
@@ -93,22 +93,8 @@ async function validateNoConflicts(input: ConflictCheck) {
     throw new Error("Horário cai sobre um bloqueio do profissional.");
   }
 
-  // 3. Outros agendamentos ativos do profissional na mesma data
-  let query = supabase
-    .from("appointments")
-    .select("id, start_time, end_time, status")
-    .eq("professional_id", input.professional_id)
-    .eq("appointment_date", input.appointment_date)
-    .in("status", ["scheduled", "confirmed", "blocked"]);
-  if (input.excludeId) query = query.neq("id", input.excludeId);
-
-  const { data: existing } = await query;
-  const overlap = (existing ?? []).some(
-    (e) => e.start_time < input.end_time && e.end_time > input.start_time
-  );
-  if (overlap) {
-    throw new Error("Conflito: já existe um atendimento neste horário.");
-  }
+  // 3. Nota: permitimos múltiplos pacientes no mesmo horário (atendimento em grupo).
+  // A validação de conflito foi relaxada propositalmente.
 }
 
 export async function upsertAppointment(input: AppointmentInput) {

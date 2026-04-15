@@ -111,11 +111,11 @@ create index if not exists idx_appt_status on public.appointments(status);
 
 -- Coluna gerada com tsrange (em data + horário) para EXCLUDE constraint
 alter table public.appointments
-  add column if not exists time_range tstzrange
+  add column if not exists time_range tsrange
   generated always as (
-    tstzrange(
-      (appointment_date::timestamp + start_time)::timestamptz,
-      (appointment_date::timestamp + end_time)::timestamptz,
+    tsrange(
+      appointment_date + start_time,
+      appointment_date + end_time,
       '[)'
     )
   ) stored;

@@ -1,10 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState, useTransition } from "react";
+import { X } from "lucide-react";
 import { AppointmentDrawer } from "./appointment-drawer";
+import { InlinePatientSearch } from "./inline-patient-search";
 import { STATUS_LABELS } from "@/lib/constants/status";
 import { formatTime, buildDaySlots, nowTimeString } from "@/lib/utils/dates";
+import { getContrastText } from "@/lib/utils/colors";
 import type {
   AppointmentWithRelations,
   Patient,
@@ -40,27 +41,33 @@ export function DayGrid({
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<AppointmentWithRelations | null>(null);
-  const [defaultProId, setDefaultProId] = useState<string | undefined>();
-  const [defaultStart, setDefaultStart] = useState<string | undefined>();
-
-  function openCreate(proId: string, slot: string) {
-    setEditing(null);
-    setDefaultProId(proId);
-    setDefaultStart(slot);
-    setDrawerOpen(true);
-  }
+  const [deletePending, startDeleteTransition] = useTransition();
 
   function openEdit(appt: AppointmentWithRelations) {
     setEditing(appt);
     setDrawerOpen(true);
   }
 
-  // Mapeia agendamentos por profissional + start time
+  function handleQuickDelete(apptId: string) {
+    startDeleteTransition(async () => {
+      try {
+        const { deleteAppointment } = await import("@/services/appointments/actions");
+        await deleteAppointment(apptId);
+      } catch (e) {
+        console.error("Erro ao remover:", e);
+      }
+    });
+  }
+
+  // Map: proId -> slot -> Appointment[]
   const apptsByPro = useMemo(() => {
-    const map = new Map<string, AppointmentWithRelations[]>();
+    const map = new Map<string, Map<string, AppointmentWithRelations[]>>();
     for (const a of appointments) {
-      if (!map.has(a.professional_id)) map.set(a.professional_id, []);
-      map.get(a.professional_id)!.push(a);
+      if (!map.has(a.professional_id)) map.set(a.professional_id, new Map());
+      const proMap = map.get(a.professional_id)!;
+      const timeSlot = a.start_time.slice(0, 5);
+      if (!proMap.has(timeSlot)) proMap.set(timeSlot, []);
+      proMap.get(timeSlot)!.push(a);
     }
     return map;
   }, [appointments]);
@@ -81,17 +88,17 @@ export function DayGrid({
           {activePros.map((p) => (
             <div
               key={p.id}
-              className="sticky top-0 z-10 border-b border-l border-border bg-muted/50 px-3 py-3"
+              className="sticky top-0 z-10 border-b border-l border-border px-3 py-3"
+              style={{
+                background: p.display_color,
+                color: getContrastText(p.display_color),
+              }}
             >
-              <div className="flex items-center gap-2">
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ background: p.display_color }}
-                />
-                <p className="text-sm font-semibold text-foreground">{p.name}</p>
-              </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm font-semibold uppercase tracking-wide">
                 {p.specialty}
+              </p>
+              <p className="text-xs opacity-90">
+                {p.name}
                 {p.room ? ` • ${p.room}` : ""}
               </p>
             </div>
@@ -114,43 +121,56 @@ export function DayGrid({
                   {slot}
                 </div>
                 {activePros.map((p) => {
-                  const list = apptsByPro.get(p.id) ?? [];
-                  const item = list.find((a) => a.start_time.slice(0, 5) === slot);
+                  const cellAppts = apptsByPro.get(p.id)?.get(slot) ?? [];
                   return (
                     <div
                       key={`${p.id}-${slot}`}
                       className={cn(
                         "group relative min-h-[44px] border-b border-l border-border p-1",
-                        isCurrentSlot && "bg-aqua-50/40"
+                        isCurrentSlot && "bg-aqua-50/40",
+                        deletePending && "opacity-70 pointer-events-none"
                       )}
                     >
-                      {item ? (
-                        <button
-                          onClick={() => openEdit(item)}
-                          className="w-full rounded-md border-l-4 px-2 py-1 text-left text-xs shadow-sm transition hover:shadow-md"
-                          style={{
-                            borderLeftColor: p.display_color,
-                            background: `${p.display_color}14`,
-                          }}
-                        >
-                          <p className="font-semibold text-foreground">
-                            {item.patient
-                              ? `${item.patient.spp} — ${item.patient.name}`
-                              : "Bloqueado"}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {formatTime(item.start_time)}–
-                            {formatTime(item.end_time)} • {STATUS_LABELS[item.status]}
-                          </p>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => openCreate(p.id, slot)}
-                          className="flex h-full w-full items-center justify-center rounded-md text-muted-foreground/30 opacity-0 transition hover:bg-muted/40 group-hover:opacity-100"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                      <div className="flex flex-col gap-0.5">
+                        {/* Existing appointments */}
+                        {cellAppts.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => openEdit(item)}
+                            className="group/card relative w-full rounded-md border-l-4 px-2 py-1 text-left text-xs shadow-sm transition hover:shadow-md cursor-pointer"
+                            style={{
+                              borderLeftColor: p.display_color,
+                              background: `${p.display_color}14`,
+                            }}
+                          >
+                            <div className="flex justify-between items-start">
+                              <p className="font-semibold text-foreground truncate flex-1">
+                                {item.patient
+                                  ? `${item.patient.spp} — ${item.patient.name}`
+                                  : "Bloqueado"}
+                              </p>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleQuickDelete(item.id); }}
+                                className="opacity-0 group-hover/card:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10"
+                                title="Remover"
+                              >
+                                <X className="h-2.5 w-2.5 text-destructive" />
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              {formatTime(item.start_time)}–
+                              {formatTime(item.end_time)} • {STATUS_LABELS[item.status]}
+                            </p>
+                          </div>
+                        ))}
+                        
+                        {/* Inline search for adding patients */}
+                        <InlinePatientSearch
+                          professionalId={p.id}
+                          appointmentDate={date}
+                          slot={slot}
+                        />
+                      </div>
                     </div>
                   );
                 })}
@@ -165,8 +185,8 @@ export function DayGrid({
         onOpenChange={setDrawerOpen}
         initial={editing}
         defaultDate={date}
-        defaultProfessionalId={defaultProId}
-        defaultStart={defaultStart}
+        defaultProfessionalId={undefined}
+        defaultStart={undefined}
         professionals={professionals}
         patients={patients}
       />

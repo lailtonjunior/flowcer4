@@ -167,6 +167,59 @@ git push -u origin main
 No painel Supabase: **Database → Replication → supabase_realtime** → marque
 as tabelas `appointments` e `professional_blocks`.
 
+## Meilisearch (busca de pacientes)
+
+A partir desta versão, a busca inline de pacientes não bate mais
+direto no SIGH a cada caractere — em vez disso, consulta um índice
+**Meilisearch** local (sub-segundo, tolerante a typos). O SIGH é lido
+periodicamente em batch para reabastecer esse índice.
+
+### Subir o container
+
+```bash
+docker compose up -d
+docker compose logs -f meilisearch   # acompanha boot
+```
+
+Confirme em http://localhost:7700 (deve responder `{"status":"available"}` em `/health`).
+
+### Primeira sincronização (manual)
+
+```bash
+curl -X POST http://localhost:3000/api/cron/sync-patients \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+A resposta traz `count`, `durationMs` e `taskUid` do Meilisearch.
+
+### Sync periódica (crontab)
+
+Edite o `crontab -e` na máquina e adicione (a cada 15 minutos):
+
+```cron
+*/15 * * * * curl -fsS -X POST http://localhost:3000/api/cron/sync-patients \
+  -H "Authorization: Bearer SUA_CRON_SECRET" >/var/log/agenda-cer4-sync.log 2>&1
+```
+
+> Outras frequências comuns: `0 * * * *` (a cada hora) ou `0 4 * * *` (madrugada).
+
+### Inspecionar índice
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  http://localhost:3000/api/cron/sync-patients
+# → { "ok": true, "numberOfDocuments": 12345, "isIndexing": false }
+```
+
+### Variáveis de ambiente
+
+```env
+MEILI_HOST=http://localhost:7700
+MEILI_MASTER_KEY=...     # mínimo 16 chars, obrigatório
+MEILI_PATIENTS_INDEX=patients
+CRON_SECRET=...          # protege /api/cron/*
+```
+
 ## Comandos úteis
 
 ```bash

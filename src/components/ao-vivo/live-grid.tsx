@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AgendaLegend } from "@/components/agenda/agenda-legend";
 import { useRealtimeAgenda } from "./use-realtime-agenda";
 import { STATUS_LABELS, STATUS_DOT } from "@/lib/constants/status";
 import { formatDate, formatTime, nowTimeString } from "@/lib/utils/dates";
@@ -33,6 +34,28 @@ export function LiveGrid({ date, initialAppointments, professionals }: Props) {
   const [filter, setFilter] = useState<"all" | "morning" | "afternoon">("all");
   const [now, setNow] = useState(nowTimeString());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [hiddenSpecialties, setHiddenSpecialties] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  function toggleSpecialty(name: string) {
+    setHiddenSpecialties((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+  function soloSpecialty(name: string) {
+    setHiddenSpecialties(
+      new Set(
+        professionals.map((p) => p.specialty).filter((s) => s !== name)
+      )
+    );
+  }
+  function resetSpecialties() {
+    setHiddenSpecialties(new Set());
+  }
 
   useEffect(() => {
     const t = setInterval(() => setNow(nowTimeString()), 30_000);
@@ -54,7 +77,9 @@ export function LiveGrid({ date, initialAppointments, professionals }: Props) {
     }
   }
 
-  const activePros = professionals.filter((p) => p.is_active);
+  const activePros = professionals.filter(
+    (p) => p.is_active && !hiddenSpecialties.has(p.specialty)
+  );
 
   // Agrupa por profissional
   const byPro = new Map<string, AppointmentWithRelations[]>();
@@ -152,7 +177,14 @@ export function LiveGrid({ date, initialAppointments, professionals }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1800px] p-6">
+      <main className="mx-auto max-w-[1800px] space-y-4 p-6">
+        <AgendaLegend
+          professionals={professionals}
+          hiddenSpecialties={hiddenSpecialties}
+          onToggleSpecialty={toggleSpecialty}
+          onSoloSpecialty={soloSpecialty}
+          onReset={resetSpecialties}
+        />
         {activePros.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-12 text-center text-muted-foreground">
             Nenhum profissional ativo.

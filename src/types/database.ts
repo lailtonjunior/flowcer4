@@ -20,6 +20,7 @@ export interface Professional {
   default_appointment_minutes: number;
   is_active: boolean;
   notes: string | null;
+  display_order: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -82,7 +83,26 @@ export interface AppointmentWithRelations extends Appointment {
     Professional,
     "id" | "name" | "specialty" | "display_color" | "room"
   >;
-  patient: Pick<Patient, "id" | "spp" | "name"> | null;
+  patient: Pick<Patient, "id" | "spp" | "name" | "phone"> | null;
+}
+
+export interface ScheduleTemplateSlot {
+  id: UUID;
+  start_time: string;
+  end_time: string;
+  position: number;
+  professional_id: UUID | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleTemplateSlotWithRelations extends ScheduleTemplateSlot {
+  professional: Pick<
+    Professional,
+    "id" | "name" | "specialty" | "display_color" | "room" | "default_appointment_minutes"
+  > | null;
 }
 
 export interface AppointmentAuditLog {

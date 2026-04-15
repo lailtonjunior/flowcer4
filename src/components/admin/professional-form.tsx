@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -16,11 +16,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   professionalSchema,
   type ProfessionalInput,
 } from "@/lib/validators/professional";
 import { upsertProfessional } from "@/services/professionals/actions";
 import type { Professional } from "@/types/database";
+import {
+  CANONICAL_SPECIALTIES,
+  DEFAULT_SPECIALTY_COLOR,
+  getSpecialtyColor,
+} from "@/lib/constants/specialty-colors";
 
 interface Props {
   open: boolean;
@@ -28,12 +40,22 @@ interface Props {
   initial?: Professional | null;
 }
 
+// Ordem canônica: as 7 principais primeiro, depois as demais em ordem alfabética.
+const SPECIALTY_OPTIONS = [
+  ...CANONICAL_SPECIALTIES.slice(0, 7),
+  ...CANONICAL_SPECIALTIES.slice(7).sort((a, b) =>
+    a.localeCompare(b, "pt-BR")
+  ),
+];
+
 export function ProfessionalForm({ open, onOpenChange, initial }: Props) {
   const [isPending, startTransition] = useTransition();
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<ProfessionalInput>({
     resolver: zodResolver(professionalSchema),
@@ -50,14 +72,30 @@ export function ProfessionalForm({ open, onOpenChange, initial }: Props) {
         }
       : {
           name: "",
-          specialty: "",
-          display_color: "#1F8A8F",
+          specialty: "Geral",
+          display_color: DEFAULT_SPECIALTY_COLOR,
           room: "",
           default_appointment_minutes: 50,
           is_active: true,
           notes: "",
         },
   });
+
+  const specialty = watch("specialty");
+  const displayColor = watch("display_color");
+
+  // Cor segue a especialidade automaticamente (a menos que o usuário tenha
+  // tocado o seletor de cor após escolher a especialidade).
+  const [colorLocked, setColorLocked] = useState(true);
+  useEffect(() => {
+    if (!colorLocked) return;
+    if (!specialty) return;
+    const auto = getSpecialtyColor(specialty);
+    if (auto !== displayColor) {
+      setValue("display_color", auto, { shouldDirty: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specialty, colorLocked]);
 
   function onSubmit(data: ProfessionalInput) {
     startTransition(async () => {
@@ -82,7 +120,9 @@ export function ProfessionalForm({ open, onOpenChange, initial }: Props) {
             {initial ? "Editar profissional" : "Novo profissional"}
           </DialogTitle>
           <DialogDescription>
-            Preencha os dados de cadastro do profissional.
+            A cor segue a especialidade automaticamente — assim todos os
+            profissionais da mesma modalidade compartilham a mesma identidade
+            visual.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -94,26 +134,79 @@ export function ProfessionalForm({ open, onOpenChange, initial }: Props) {
                 <p className="text-xs text-destructive">{errors.name.message}</p>
               )}
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="specialty">Especialidade</Label>
-              <Input id="specialty" {...register("specialty")} />
+              <Select
+                value={specialty}
+                onValueChange={(v) => {
+                  setColorLocked(true);
+                  setValue("specialty", v, { shouldDirty: true });
+                }}
+              >
+                <SelectTrigger id="specialty">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {SPECIALTY_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ background: getSpecialtyColor(s) }}
+                        />
+                        {s}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {errors.specialty && (
                 <p className="text-xs text-destructive">{errors.specialty.message}</p>
               )}
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="room">Sala / Unidade</Label>
               <Input id="room" {...register("room")} />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="display_color">Cor de destaque</Label>
-              <Input
-                id="display_color"
-                type="color"
-                className="h-10 cursor-pointer p-1"
-                {...register("display_color")}
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id="display_color"
+                  type="color"
+                  className="h-10 w-16 cursor-pointer p-1"
+                  {...register("display_color", {
+                    onChange: () => setColorLocked(false),
+                  })}
+                />
+                <span className="font-mono text-xs text-muted-foreground">
+                  {displayColor}
+                </span>
+                {!colorLocked && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-accent underline"
+                    onClick={() => {
+                      setColorLocked(true);
+                      setValue("display_color", getSpecialtyColor(specialty), {
+                        shouldDirty: true,
+                      });
+                    }}
+                  >
+                    usar cor da especialidade
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {colorLocked
+                  ? "Vinculada à especialidade"
+                  : "Personalizada (sobrescreve o padrão)"}
+              </p>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="default_appointment_minutes">
                 Duração padrão (min)
@@ -126,6 +219,7 @@ export function ProfessionalForm({ open, onOpenChange, initial }: Props) {
                 {...register("default_appointment_minutes")}
               />
             </div>
+
             <div className="flex items-center gap-2 sm:col-span-2">
               <input
                 id="is_active"
@@ -135,11 +229,13 @@ export function ProfessionalForm({ open, onOpenChange, initial }: Props) {
               />
               <Label htmlFor="is_active">Ativo</Label>
             </div>
+
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="notes">Observações internas</Label>
               <Textarea id="notes" rows={3} {...register("notes")} />
             </div>
           </div>
+
           <DialogFooter>
             <Button
               type="button"

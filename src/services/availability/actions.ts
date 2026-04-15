@@ -13,6 +13,31 @@ import type {
   ProfessionalWeeklyAvailability,
 } from "@/types/database";
 
+/**
+ * Retorna, para cada profissional, o conjunto de dias-da-semana (0=dom..6=sáb)
+ * em que ele atende. Serve pro grid pintar "Não atende" nos dias errados
+ * ANTES do usuário tentar agendar.
+ */
+export async function listAllWeekdayAvailability(): Promise<
+  Record<string, number[]>
+> {
+  await requireAdmin();
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("professional_weekly_availability")
+    .select("professional_id, weekday, is_active")
+    .eq("is_active", true);
+  if (error) throw new Error(error.message);
+  const map: Record<string, number[]> = {};
+  for (const row of data ?? []) {
+    if (!map[row.professional_id]) map[row.professional_id] = [];
+    if (!map[row.professional_id].includes(row.weekday)) {
+      map[row.professional_id].push(row.weekday);
+    }
+  }
+  return map;
+}
+
 export async function listAvailability(professionalId: string) {
   await requireAdmin();
   const supabase = await createServerSupabase();

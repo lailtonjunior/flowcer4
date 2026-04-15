@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Plus, Pencil, Settings2, Power, Trash2 } from "lucide-react";
+import { Plus, Pencil, Settings2, Power, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,8 @@ import {
 } from "@/components/admin/professional-form";
 import {
   deleteProfessional,
+  bulkDeactivateProfessionals,
+  syncProfessionalsFromSigh,
 } from "@/services/professionals/actions";
 import type { Professional } from "@/types/database";
 
@@ -19,12 +21,34 @@ export function ProfessionalsTable({ data }: { data: Professional[] }) {
   const dialog = useProfessionalDialog();
   const [filter, setFilter] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const filtered = data.filter(
     (p) =>
       p.name.toLowerCase().includes(filter.toLowerCase()) ||
       p.specialty.toLowerCase().includes(filter.toLowerCase())
   );
+
+  const allFilteredIds = filtered.map((p) => p.id);
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selected.has(id));
+  const someSelected = selected.size > 0;
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(allFilteredIds));
+    }
+  }
 
   function handleDeactivate(id: string) {
     if (!confirm("Inativar este profissional? O histórico será preservado.")) return;
@@ -38,6 +62,43 @@ export function ProfessionalsTable({ data }: { data: Professional[] }) {
     });
   }
 
+  function handleBulkDeactivate() {
+    const activeSelected = [...selected].filter((id) => {
+      const p = data.find((d) => d.id === id);
+      return p?.is_active;
+    });
+    if (activeSelected.length === 0) {
+      toast.info("Nenhum profissional ativo selecionado.");
+      return;
+    }
+    if (!confirm(`Inativar ${activeSelected.length} profissional(is) selecionado(s)?`)) return;
+    startTransition(async () => {
+      try {
+        const res = await bulkDeactivateProfessionals(activeSelected);
+        toast.success(`${res.count} profissional(is) inativado(s).`);
+        setSelected(new Set());
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Erro");
+      }
+    });
+  }
+
+  function handleSync() {
+    startTransition(async () => {
+      try {
+        const res = await syncProfessionalsFromSigh();
+        toast.success(`${res.count} profissionais sincronizados do SIGH!`, {
+          description: res.specialties?.length
+            ? `Especialidades: ${res.specialties.join(", ")}`
+            : undefined,
+          duration: 8000,
+        });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Erro ao sincronizar SIGH");
+      }
+    });
+  }
+
   return (
     <>
       <div className="flex items-center justify-between gap-4 border-b border-border p-4">
@@ -47,10 +108,26 @@ export function ProfessionalsTable({ data }: { data: Professional[] }) {
           onChange={(e) => setFilter(e.target.value)}
           className="max-w-sm"
         />
-        <Button onClick={dialog.openCreate}>
-          <Plus className="h-4 w-4" />
-          Novo profissional
-        </Button>
+        <div className="flex items-center gap-2">
+          {someSelected && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDeactivate}
+              disabled={isPending}
+            >
+              <Power className="h-4 w-4 mr-1" />
+              Inativar ({selected.size})
+            </Button>
+          )}
+          <Button variant="outline" onClick={handleSync} disabled={isPending}>
+            Sincronizar do SIGH
+          </Button>
+          <Button onClick={dialog.openCreate}>
+            <Plus className="h-4 w-4" />
+            Novo profissional
+          </Button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -61,6 +138,14 @@ export function ProfessionalsTable({ data }: { data: Professional[] }) {
         <table className="w-full text-sm">
           <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
+              <th className="px-4 py-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-border accent-accent cursor-pointer"
+                />
+              </th>
               <th className="px-4 py-3">Nome</th>
               <th className="px-4 py-3">Especialidade</th>
               <th className="px-4 py-3">Sala</th>
@@ -71,11 +156,22 @@ export function ProfessionalsTable({ data }: { data: Professional[] }) {
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.map((p) => (
-              <tr key={p.id} className="hover:bg-muted/30">
+              <tr
+                key={p.id}
+                className={`hover:bg-muted/30 transition-colors ${selected.has(p.id) ? "bg-accent/5" : ""}`}
+              >
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(p.id)}
+                    onChange={() => toggleOne(p.id)}
+                    className="h-4 w-4 rounded border-border accent-accent cursor-pointer"
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <span
-                      className="h-3 w-3 rounded-full"
+                      className="h-3 w-3 rounded-full shrink-0"
                       style={{ background: p.display_color }}
                     />
                     <span className="font-medium">{p.name}</span>

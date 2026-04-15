@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    container_name: cer4_meilisearch
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
+      - MEILI_NO_ANALYTICS=true
+      - MEILI_ENV=production
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+
+volumes:
+  meili_data:
